@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
 import { store } from '@/lib/store';
+import { generateJSON, DEFAULT_MODEL } from '@/lib/llm';
 import type { GenerateRequest, MockData } from '@/lib/types';
 
 const MAX_TTL = 7 * 24 * 3600; // 7 days
@@ -8,8 +9,7 @@ const DEFAULT_TTL = 86400; // 24 hours
 
 /**
  * POST /api/generate
- * Phase C: Now with storage integration (mock LLM data for now)
- * Phase D: Will add real LLM integration
+ * Phase D: Now with real LLM integration via OpenRouter
  */
 export async function POST(req: Request) {
   try {
@@ -24,27 +24,33 @@ export async function POST(req: Request) {
     }
 
     // Parse and validate TTL
-    const ttl = Math.min(
-      Number(body.ttl_seconds || DEFAULT_TTL),
-      MAX_TTL
-    );
+    const ttl = Math.min(Number(body.ttl_seconds || DEFAULT_TTL), MAX_TTL);
     const path = body.path ? String(body.path).replace(/^\/+|\/+$/g, '') : '';
+    const model = body.model || DEFAULT_MODEL;
 
     // Generate token
     const token = nanoid(21);
     const key = `mock:${token}`;
 
-    // For Phase C, use mock payload (will be replaced with LLM in Phase D)
-    const mockPayload = {
-      message: 'Mock data generated - LLM integration coming in Phase D',
-      prompt: prompt,
-      items: body.items || 10,
-      data: Array.from({ length: body.items || 10 }, (_, i) => ({
-        id: i + 1,
-        name: `Item ${i + 1}`,
-        value: Math.floor(Math.random() * 100),
-      })),
-    };
+    console.log(`[Generate] Generating with model: ${model}`);
+
+    // Generate JSON using LLM (Phase D!)
+    let payload: any;
+    try {
+      payload = await generateJSON(prompt, {
+        items: body.items,
+        model,
+      });
+    } catch (error) {
+      console.error('[Generate] LLM generation failed:', error);
+      return NextResponse.json(
+        {
+          error: 'Failed to generate JSON from prompt',
+          details: error instanceof Error ? error.message : 'Unknown error',
+        },
+        { status: 502 }
+      );
+    }
 
     // Prepare storage data
     const now = new Date();
@@ -53,18 +59,19 @@ export async function POST(req: Request) {
     const stored: MockData = {
       token,
       prompt,
-      payload: mockPayload,
+      payload,
       created_at: now.toISOString(),
       expires_at: expiresAt.toISOString(),
       path,
       private: !!body.private,
       cors: body.cors || '*',
+      model,
     };
 
     // Store with TTL
     await store.set(key, JSON.stringify(stored), { ex: ttl });
 
-    console.log(`[Generate] Created token ${token} with TTL ${ttl}s`);
+    console.log(`[Generate] Created token ${token} with TTL ${ttl}s using ${model}`);
 
     // Build URL
     const base = process.env.BASE_URL || `http://localhost:3000`;
@@ -74,7 +81,8 @@ export async function POST(req: Request) {
       url,
       token,
       expires_at: expiresAt.toISOString(),
-      preview: mockPayload,
+      preview: payload,
+      model,
     });
   } catch (error) {
     console.error('Error in /api/generate:', error);

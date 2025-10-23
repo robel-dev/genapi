@@ -2,6 +2,8 @@
  * Type definitions for GenAPI
  */
 
+import type { ModelId } from './llm';
+
 export interface MockData {
   token: string;
   prompt: string;
@@ -11,6 +13,7 @@ export interface MockData {
   path: string;
   private: boolean;
   cors: string;
+  model?: string;
   secret?: string;
 }
 
@@ -21,6 +24,7 @@ export interface GenerateRequest {
   items?: number;
   private?: boolean;
   cors?: string;
+  model?: ModelId;
 }
 
 export interface GenerateResponse {
@@ -28,6 +32,7 @@ export interface GenerateResponse {
   token: string;
   expires_at: string;
   preview: any;
+  model?: string;
   secret?: string;
 }
 
