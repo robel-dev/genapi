@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
+import { store } from '@/lib/store';
+import type { MockData } from '@/lib/types';
 
 /**
  * GET /api/temp/:token
- * Skeleton endpoint that returns static mock data for any token
- * Phase B: Basic route structure only (no real storage yet)
+ * Phase C: Now retrieves data from storage
  */
 export async function GET(
   req: Request,
@@ -16,22 +17,29 @@ export async function GET(
       return NextResponse.json({ error: 'Token is required' }, { status: 400 });
     }
 
-    // For now, return static mock data
-    // Will be replaced with real storage lookup in Phase C
-    const mockData = {
-      message: 'Mock API response',
-      token: token,
-      note: 'This is static data. Real storage integration coming in Phase C',
-      timestamp: new Date().toISOString(),
-    };
+    // Fetch from storage
+    const key = `mock:${token}`;
+    const storedRaw = await store.get(key);
 
+    if (!storedRaw) {
+      return NextResponse.json(
+        { error: 'Not found or expired' },
+        { status: 404 }
+      );
+    }
+
+    const stored: MockData = JSON.parse(storedRaw);
+
+    // Build response headers
     const headers = new Headers();
     headers.set('Content-Type', 'application/json');
-    headers.set('Access-Control-Allow-Origin', '*');
+    headers.set('Access-Control-Allow-Origin', stored.cors || '*');
     headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
     headers.set('Access-Control-Allow-Headers', 'Content-Type');
+    headers.set('X-Expires-At', stored.expires_at);
+    headers.set('X-Token', stored.token);
 
-    return new NextResponse(JSON.stringify(mockData, null, 2), {
+    return new NextResponse(JSON.stringify(stored.payload, null, 2), {
       status: 200,
       headers,
     });
